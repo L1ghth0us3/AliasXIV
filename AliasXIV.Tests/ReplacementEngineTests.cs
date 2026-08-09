@@ -1,0 +1,171 @@
+using AliasXIV.Models;
+using AliasXIV.Services;
+using Xunit;
+
+namespace AliasXIV.Tests;
+
+public class ReplacementEngineTests
+{
+    private readonly ReplacementEngine engine = new();
+
+    private static ReplacementRule Rule(
+        string find,
+        string replace,
+        MatchMode mode = MatchMode.WholeWord,
+        bool caseSensitive = false,
+        bool enabled = true)
+        => new()
+        {
+            Find = find,
+            Replace = replace,
+            MatchMode = mode,
+            CaseSensitive = caseSensitive,
+            Enabled = enabled,
+        };
+
+    [Fact]
+    public void SimpleReplacement()
+    {
+        var rules = new[] { Rule("nice", "bad") };
+        Assert.Equal("Today is a bad day", engine.Transform("Today is a nice day", rules));
+    }
+
+    [Fact]
+    public void RepeatedReplacement()
+    {
+        var rules = new[] { Rule("nice", "bad") };
+        Assert.Equal("bad bad bad", engine.Transform("nice nice nice", rules));
+    }
+
+    [Fact]
+    public void WholeWordBoundary()
+    {
+        var rules = new[] { Rule("nice", "bad") };
+        Assert.Equal("bad nicely niceness", engine.Transform("nice nicely niceness", rules));
+    }
+
+    [Fact]
+    public void PunctuationBoundaries()
+    {
+        var rules = new[] { Rule("nice", "bad") };
+        Assert.Equal("bad, bad! (bad)", engine.Transform("nice, nice! (nice)", rules));
+    }
+
+    [Fact]
+    public void CaseInsensitive()
+    {
+        var rules = new[] { Rule("nice", "bad", caseSensitive: false) };
+        Assert.Equal("bad bad bad", engine.Transform("nice Nice NICE", rules));
+    }
+
+    [Fact]
+    public void CaseSensitive()
+    {
+        var rules = new[] { Rule("nice", "bad", caseSensitive: true) };
+        Assert.Equal("bad Nice NICE", engine.Transform("nice Nice NICE", rules));
+    }
+
+    [Fact]
+    public void PhraseReplacement()
+    {
+        var rules = new[] { Rule("very nice", "very bad") };
+        Assert.Equal("That was very bad.", engine.Transform("That was very nice.", rules));
+    }
+
+    [Fact]
+    public void NoCascading()
+    {
+        var rules = new[]
+        {
+            Rule("nice", "bad"),
+            Rule("bad", "awful"),
+        };
+        Assert.Equal("bad awful", engine.Transform("nice bad", rules));
+    }
+
+    [Fact]
+    public void LongestSamePositionMatchWins()
+    {
+        var rules = new[]
+        {
+            Rule("nice", "bad"),
+            Rule("nice day", "awful evening"),
+        };
+        Assert.Equal("awful evening", engine.Transform("nice day", rules));
+    }
+
+    [Fact]
+    public void EmptyReplacement()
+    {
+        var rules = new[] { Rule("really", string.Empty) };
+        Assert.Equal("I  like it", engine.Transform("I really like it", rules));
+    }
+
+    [Fact]
+    public void EmptyFindIsIgnored()
+    {
+        var rules = new[] { Rule(string.Empty, "bad") };
+        Assert.Equal("nice", engine.Transform("nice", rules));
+    }
+
+    [Fact]
+    public void DisabledRuleIsIgnored()
+    {
+        var rules = new[] { Rule("nice", "bad", enabled: false) };
+        Assert.Equal("nice", engine.Transform("nice", rules));
+    }
+
+    [Fact]
+    public void SubstringMode()
+    {
+        var rules = new[] { Rule("cat", "dog", MatchMode.Substring) };
+        Assert.Equal("dogs", engine.Transform("cats", rules));
+        Assert.Equal("condogenate", engine.Transform("concatenate", rules));
+    }
+
+    [Fact]
+    public void UnicodeAndEmojiSurroundingMatch()
+    {
+        var rules = new[] { Rule("café", "bistro") };
+        Assert.Equal("bistro ☕ Straße", engine.Transform("café ☕ Straße", rules));
+    }
+
+    [Fact]
+    public void EmojiDoesNotBlockWholeWordMatch()
+    {
+        var rules = new[] { Rule("nice", "bad") };
+        Assert.Equal("😀 bad 😀", engine.Transform("😀 nice 😀", rules));
+    }
+
+    [Fact]
+    public void JapaneseWholeWordUsesSubstringFriendlyBoundaries()
+    {
+        var rules = new[] { Rule("猫", "犬", MatchMode.Substring) };
+        Assert.Equal("犬です", engine.Transform("猫です", rules));
+    }
+
+    [Fact]
+    public void IdenticalResultUnchangedReferenceEqualityNotRequired()
+    {
+        var rules = new[] { Rule("nice", "nice") };
+        Assert.Equal("nice day", engine.Transform("nice day", rules));
+    }
+
+    [Fact]
+    public void EarlierRuleWinsWhenLengthEqual()
+    {
+        var rules = new[]
+        {
+            Rule("nice", "first"),
+            Rule("nice", "second"),
+        };
+        Assert.Equal("first", engine.Transform("nice", rules));
+    }
+
+    [Fact]
+    public void UnderscoreIsWordCharacter()
+    {
+        var rules = new[] { Rule("nice", "bad") };
+        Assert.Equal("nice_day", engine.Transform("nice_day", rules));
+    }
+}

@@ -1,0 +1,12 @@
+{
+  "Author": "HalfBlindCatte",
+  "Name": "AliasXIV",
+  "Punchline": "Replace words and phrases in outgoing chat before they are sent.",
+  "Description": "Intercepts outgoing FFXIV chat and applies user-defined word/phrase replacements immediately before the game processes the message. Open with /aliasxiv.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "chat",
+    "replace",
+    "text"
+  ]
+}
