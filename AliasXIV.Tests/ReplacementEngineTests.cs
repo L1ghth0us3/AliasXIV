@@ -168,4 +168,89 @@ public class ReplacementEngineTests
         var rules = new[] { Rule("nice", "bad") };
         Assert.Equal("nice_day", engine.Transform("nice_day", rules));
     }
+
+    [Fact]
+    public void ChanceDisabledAlwaysAppliesEvenWhenPercentIsZero()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = false;
+        rule.ChancePercent = 0f;
+
+        Assert.Equal("bad", engine.Transform("nice", [rule], evaluateChance: true));
+    }
+
+    [Fact]
+    public void ChanceEnabledAtZeroPercentNeverApplies()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 0f;
+
+        Assert.Equal("nice", engine.Transform("nice", [rule], evaluateChance: true));
+    }
+
+    [Fact]
+    public void ChanceEnabledAtOneHundredPercentAlwaysApplies()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 100f;
+
+        Assert.Equal("bad", engine.Transform("nice", [rule], evaluateChance: true));
+    }
+
+    [Fact]
+    public void ChanceRollBelowPercentAppliesRule()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 50f;
+        var random = new SequenceRandom(0.49);
+
+        Assert.Equal("bad", engine.Transform("nice", [rule], evaluateChance: true, random));
+    }
+
+    [Fact]
+    public void ChanceRollAtOrAbovePercentSkipsRule()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 50f;
+        var random = new SequenceRandom(0.50);
+
+        Assert.Equal("nice", engine.Transform("nice", [rule], evaluateChance: true, random));
+    }
+
+    [Fact]
+    public void EvaluateChanceFalseIgnoresChanceFields()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 0f;
+
+        Assert.Equal("bad", engine.Transform("nice", [rule], evaluateChance: false));
+    }
+
+    [Fact]
+    public void ChanceIsRolledOncePerRuleForAllMatches()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 50f;
+        var random = new SequenceRandom(0.10);
+
+        Assert.Equal("bad bad bad", engine.Transform("nice nice nice", [rule], evaluateChance: true, random));
+    }
+
+    private sealed class SequenceRandom : Random
+    {
+        private readonly Queue<double> values;
+
+        public SequenceRandom(params double[] sequence)
+        {
+            values = new Queue<double>(sequence);
+        }
+
+        public override double NextDouble() => values.Dequeue();
+    }
 }

@@ -13,4 +13,8 @@ public sealed class ReplacementRule
     public MatchMode MatchMode { get; set; } = MatchMode.WholeWord;
 
     public bool CaseSensitive { get; set; }
+
+    public bool ChanceEnabled { get; set; }
+
+    public float ChancePercent { get; set; } = 100f;
 }

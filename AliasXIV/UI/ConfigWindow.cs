@@ -74,7 +74,7 @@ public sealed class ConfigWindow : Window, IDisposable
                     | ImGuiTableFlags.Resizable
                     | ImGuiTableFlags.ScrollX;
 
-        if (!ImGui.BeginTable("##AliasXIVRulesV3", 6, flags, new Vector2(-1, height)))
+        if (!ImGui.BeginTable("##AliasXIVRulesV4", 8, flags, new Vector2(-1, height)))
             return;
 
         ImGui.TableSetupScrollFreeze(0, 1);
@@ -83,6 +83,8 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.TableSetupColumn("Replace With", ImGuiTableColumnFlags.WidthStretch, 1f);
         ImGui.TableSetupColumn("Match", ImGuiTableColumnFlags.WidthFixed, 120f);
         ImGui.TableSetupColumn("Case Sensitive", ImGuiTableColumnFlags.WidthFixed, 110f);
+        ImGui.TableSetupColumn("Chance", ImGuiTableColumnFlags.WidthFixed, 60f);
+        ImGui.TableSetupColumn("%", ImGuiTableColumnFlags.WidthFixed, 70f);
         ImGui.TableSetupColumn("Delete", ImGuiTableColumnFlags.WidthFixed, 50f);
         ImGui.TableHeadersRow();
 
@@ -140,6 +142,27 @@ public sealed class ConfigWindow : Window, IDisposable
             }
 
             ImGui.TableSetColumnIndex(5);
+            var chanceEnabled = rule.ChanceEnabled;
+            if (ImGui.Checkbox("##chance", ref chanceEnabled))
+            {
+                rule.ChanceEnabled = chanceEnabled;
+                configuration.Save();
+            }
+
+            ImGui.TableSetColumnIndex(6);
+            ImGui.SetNextItemWidth(-float.Epsilon);
+            var chancePercent = rule.ChancePercent;
+            if (!rule.ChanceEnabled)
+                ImGui.BeginDisabled();
+            if (ImGui.InputFloat("##chancePercent", ref chancePercent, 0f, 0f, "%.0f"))
+            {
+                rule.ChancePercent = Math.Clamp(chancePercent, 0f, 100f);
+                configuration.Save();
+            }
+            if (!rule.ChanceEnabled)
+                ImGui.EndDisabled();
+
+            ImGui.TableSetColumnIndex(7);
             if (ImGui.Button("X"))
                 removeIndex = i;
 

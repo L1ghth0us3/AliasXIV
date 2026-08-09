@@ -13,18 +13,29 @@ public sealed class ReplacementEngine
         string Replacement,
         int RulePriority);
 
-    public string Transform(string input, IReadOnlyList<ReplacementRule> rules)
+    public string Transform(
+        string input,
+        IReadOnlyList<ReplacementRule> rules,
+        bool evaluateChance = false,
+        Random? random = null)
     {
         if (string.IsNullOrEmpty(input) || rules.Count == 0)
             return input;
 
         var candidates = new List<ReplacementMatch>();
+        var rng = evaluateChance ? random ?? Random.Shared : null;
 
         for (var ruleIndex = 0; ruleIndex < rules.Count; ruleIndex++)
         {
             var rule = rules[ruleIndex];
             if (!rule.Enabled || string.IsNullOrEmpty(rule.Find))
                 continue;
+
+            if (evaluateChance && rule.ChanceEnabled)
+            {
+                if (rng!.NextDouble() * 100.0 >= rule.ChancePercent)
+                    continue;
+            }
 
             CollectMatches(input, rule, ruleIndex, candidates);
         }

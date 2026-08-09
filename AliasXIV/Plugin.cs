@@ -99,6 +99,7 @@ public sealed class Plugin : IDalamudPlugin
         {
             rule.Find ??= string.Empty;
             rule.Replace ??= string.Empty;
+            rule.ChancePercent = Math.Clamp(rule.ChancePercent, 0f, 100f);
             if (rule.Id == Guid.Empty)
                 rule.Id = Guid.NewGuid();
         }
