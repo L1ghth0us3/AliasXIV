@@ -11,6 +11,7 @@ public sealed class ConfigWindow : Window, IDisposable
     private readonly Configuration configuration;
     private readonly ReplacementEngine replacementEngine;
     private string previewInput = "Today is a nice day";
+    private MatchMode activeMatchTab = MatchMode.WholeWord;
 
     public ConfigWindow(Configuration configuration, ReplacementEngine replacementEngine)
         : base("AliasXIV###AliasXIVConfig")
@@ -57,9 +58,31 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.TextWrapped(
             "Find tip: separate multiple words with | to replace them all with the same text (e.g. yes|yea → qi).");
 
+        if (ImGui.BeginTabBar("##AliasXIVMatchTabs"))
+        {
+            if (ImGui.BeginTabItem("Whole Word"))
+            {
+                activeMatchTab = MatchMode.WholeWord;
+                DrawActiveTabContents();
+                ImGui.EndTabItem();
+            }
+
+            if (ImGui.BeginTabItem("Substring"))
+            {
+                activeMatchTab = MatchMode.Substring;
+                DrawActiveTabContents();
+                ImGui.EndTabItem();
+            }
+
+            ImGui.EndTabBar();
+        }
+    }
+
+    private void DrawActiveTabContents()
+    {
         if (ImGui.Button("+ Add Rule"))
         {
-            configuration.Rules.Add(new ReplacementRule());
+            configuration.Rules.Add(new ReplacementRule { MatchMode = activeMatchTab });
             configuration.Save();
         }
 
@@ -77,14 +100,13 @@ public sealed class ConfigWindow : Window, IDisposable
                     | ImGuiTableFlags.Resizable
                     | ImGuiTableFlags.ScrollX;
 
-        if (!ImGui.BeginTable("##AliasXIVRulesV4", 8, flags, new Vector2(-1, height)))
+        if (!ImGui.BeginTable("##AliasXIVRulesV5", 7, flags, new Vector2(-1, height)))
             return;
 
         ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableSetupColumn("Enabled", ImGuiTableColumnFlags.WidthFixed, 60f);
         ImGui.TableSetupColumn("Find (a|b)", ImGuiTableColumnFlags.WidthStretch, 1f);
         ImGui.TableSetupColumn("Replace With", ImGuiTableColumnFlags.WidthStretch, 1f);
-        ImGui.TableSetupColumn("Match", ImGuiTableColumnFlags.WidthFixed, 120f);
         ImGui.TableSetupColumn("Case Sensitive", ImGuiTableColumnFlags.WidthFixed, 110f);
         ImGui.TableSetupColumn("Chance", ImGuiTableColumnFlags.WidthFixed, 60f);
         ImGui.TableSetupColumn("%", ImGuiTableColumnFlags.WidthFixed, 70f);
@@ -97,11 +119,15 @@ public sealed class ConfigWindow : Window, IDisposable
         for (var i = 0; i < rules.Count; i++)
         {
             var rule = rules[i];
+            if (rule.MatchMode != activeMatchTab)
+                continue;
+
             ImGui.PushID(rule.Id.ToString());
 
             ImGui.TableNextRow();
 
             ImGui.TableSetColumnIndex(0);
+            CenterNextCheckbox();
             var ruleEnabled = rule.Enabled;
             if (ImGui.Checkbox("##enabled", ref ruleEnabled))
             {
@@ -134,15 +160,7 @@ public sealed class ConfigWindow : Window, IDisposable
             }
 
             ImGui.TableSetColumnIndex(3);
-            ImGui.SetNextItemWidth(-float.Epsilon);
-            var matchIndex = rule.MatchMode == MatchMode.WholeWord ? 0 : 1;
-            if (ImGui.Combo("##match", ref matchIndex, "Whole word\0Substring\0"))
-            {
-                rule.MatchMode = matchIndex == 0 ? MatchMode.WholeWord : MatchMode.Substring;
-                configuration.Save();
-            }
-
-            ImGui.TableSetColumnIndex(4);
+            CenterNextCheckbox();
             var caseSensitive = rule.CaseSensitive;
             if (ImGui.Checkbox("##case", ref caseSensitive))
             {
@@ -150,7 +168,8 @@ public sealed class ConfigWindow : Window, IDisposable
                 configuration.Save();
             }
 
-            ImGui.TableSetColumnIndex(5);
+            ImGui.TableSetColumnIndex(4);
+            CenterNextCheckbox();
             var chanceEnabled = rule.ChanceEnabled;
             if (ImGui.Checkbox("##chance", ref chanceEnabled))
             {
@@ -158,7 +177,7 @@ public sealed class ConfigWindow : Window, IDisposable
                 configuration.Save();
             }
 
-            ImGui.TableSetColumnIndex(6);
+            ImGui.TableSetColumnIndex(5);
             ImGui.SetNextItemWidth(-float.Epsilon);
             var chancePercent = rule.ChancePercent;
             if (!rule.ChanceEnabled)
@@ -171,9 +190,17 @@ public sealed class ConfigWindow : Window, IDisposable
             if (!rule.ChanceEnabled)
                 ImGui.EndDisabled();
 
-            ImGui.TableSetColumnIndex(7);
-            if (ImGui.Button("X"))
+            ImGui.TableSetColumnIndex(6);
+            var io = ImGui.GetIO();
+            var canDelete = io.KeyCtrl && io.KeyShift;
+            if (!canDelete)
+                ImGui.BeginDisabled();
+            if (ImGui.Button("X") && canDelete)
                 removeIndex = i;
+            if (!canDelete)
+                ImGui.EndDisabled();
+            if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                ImGui.SetTooltip("Hold Ctrl+Shift and click to delete");
 
             ImGui.PopID();
         }
@@ -185,6 +212,14 @@ public sealed class ConfigWindow : Window, IDisposable
             rules.RemoveAt(removeIndex);
             configuration.Save();
         }
+    }
+
+    private static void CenterNextCheckbox()
+    {
+        var columnWidth = ImGui.GetColumnWidth();
+        var checkboxSize = ImGui.GetFrameHeight();
+        var offset = Math.Max(0f, (columnWidth - checkboxSize) * 0.5f);
+        ImGui.SetCursorPosX(ImGui.GetCursorPosX() + offset);
     }
 
     private void DrawPreview()
