@@ -1,4 +1,5 @@
 using System.Diagnostics.CodeAnalysis;
+using AliasXIV.Models;
 
 namespace AliasXIV.Services;
 
@@ -6,17 +7,19 @@ public enum ChatInputRejectReason
 {
     None,
     Empty,
-    SlashCommandsDisabled,
     InvalidCommand,
     ExplicitBypass,
     CommandOnlyNoPayload,
+    UnknownCommand,
+    ChannelDisabled,
+    ActiveChannelUnresolved,
 }
 
 public sealed class ChatInputPolicy
 {
     /// <summary>
     /// Commands whose payloads must never be rewritten (recipient / targeting risk).
-    /// Umbrella mode still transforms every other slash-command payload.
+    /// Active Tell channel (plain chat) still follows the Tell enable tickbox.
     /// </summary>
     private static readonly HashSet<string> ExplicitBypassCommands = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -26,28 +29,34 @@ public sealed class ChatInputPolicy
 
     public bool TryGetTransformablePayload(
         string originalText,
-        bool applyToSlashCommandPayloads,
+        IReadOnlySet<OutgoingChatChannel> enabledChannels,
+        IOutgoingChannelResolver channelResolver,
         [NotNullWhen(true)] out string? prefix,
         [NotNullWhen(true)] out string? payload)
         => TryGetTransformablePayload(
             originalText,
-            applyToSlashCommandPayloads,
+            enabledChannels,
+            channelResolver,
             out prefix,
             out payload,
+            out _,
             out _,
             out _);
 
     public bool TryGetTransformablePayload(
         string originalText,
-        bool applyToSlashCommandPayloads,
+        IReadOnlySet<OutgoingChatChannel> enabledChannels,
+        IOutgoingChannelResolver channelResolver,
         [NotNullWhen(true)] out string? prefix,
         [NotNullWhen(true)] out string? payload,
         out ChatInputRejectReason rejectReason,
-        out string? command)
+        out string? command,
+        out OutgoingChatChannel? channel)
     {
         prefix = null;
         payload = null;
         command = null;
+        channel = null;
         rejectReason = ChatInputRejectReason.None;
 
         if (string.IsNullOrEmpty(originalText))
@@ -56,18 +65,25 @@ public sealed class ChatInputPolicy
             return false;
         }
 
-        // Plain chat (active channel, no slash): always transformable.
+        // Plain chat: gate on the game's active outgoing channel.
         if (originalText[0] != '/')
         {
+            if (!channelResolver.TryGetActiveChannel(out var activeChannel))
+            {
+                rejectReason = ChatInputRejectReason.ActiveChannelUnresolved;
+                return false;
+            }
+
+            channel = activeChannel;
+            if (!enabledChannels.Contains(activeChannel))
+            {
+                rejectReason = ChatInputRejectReason.ChannelDisabled;
+                return false;
+            }
+
             prefix = string.Empty;
             payload = originalText;
             return true;
-        }
-
-        if (!applyToSlashCommandPayloads)
-        {
-            rejectReason = ChatInputRejectReason.SlashCommandsDisabled;
-            return false;
         }
 
         if (!TrySplitCommand(originalText, out command, out var commandEndIndex))
@@ -82,8 +98,19 @@ public sealed class ChatInputPolicy
             return false;
         }
 
-        // Umbrella: transform payload for every other slash command that has one.
-        // Keeps the command token untouched (/cwl1, /echo, /p, ...).
+        if (!channelResolver.TryMapSlashCommand(command, out var mappedChannel))
+        {
+            rejectReason = ChatInputRejectReason.UnknownCommand;
+            return false;
+        }
+
+        channel = mappedChannel;
+        if (!enabledChannels.Contains(mappedChannel))
+        {
+            rejectReason = ChatInputRejectReason.ChannelDisabled;
+            return false;
+        }
+
         if (commandEndIndex >= originalText.Length)
         {
             rejectReason = ChatInputRejectReason.CommandOnlyNoPayload;

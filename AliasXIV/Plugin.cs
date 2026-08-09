@@ -1,4 +1,5 @@
 using AliasXIV.Hooks;
+using AliasXIV.Models;
 using AliasXIV.Services;
 using AliasXIV.UI;
 using Dalamud.Game.Command;
@@ -24,6 +25,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ChatBoxHook chatBoxHook;
     private readonly ReplacementEngine replacementEngine = new();
     private readonly ChatInputPolicy chatInputPolicy = new();
+    private readonly OutgoingChannelResolver channelResolver = new();
     private readonly OutgoingChatRewriter rewriter;
 
     public Configuration Configuration { get; }
@@ -33,7 +35,11 @@ public sealed class Plugin : IDalamudPlugin
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
         NormalizeConfiguration(Configuration);
 
-        rewriter = new OutgoingChatRewriter(Configuration, replacementEngine, chatInputPolicy);
+        rewriter = new OutgoingChatRewriter(
+            Configuration,
+            replacementEngine,
+            chatInputPolicy,
+            channelResolver);
 
         configWindow = new ConfigWindow(Configuration, replacementEngine);
         windowSystem.AddWindow(configWindow);
@@ -95,6 +101,23 @@ public sealed class Plugin : IDalamudPlugin
     private static void NormalizeConfiguration(Configuration configuration)
     {
         configuration.Rules ??= [];
+        configuration.EnabledChannels ??= [];
+
+        // Migrate config v1 umbrella slash flag → per-channel allowlist (all off by default).
+        if (configuration.Version < 2)
+        {
+            configuration.EnabledChannels = [];
+            configuration.Version = 2;
+        }
+        else
+        {
+            // Drop unknown values and duplicates after catalog changes.
+            configuration.EnabledChannels = configuration.EnabledChannels
+                .Where(OutgoingChatChannelCatalog.IsDefined)
+                .Distinct()
+                .ToList();
+        }
+
         foreach (var rule in configuration.Rules)
         {
             rule.Find ??= string.Empty;

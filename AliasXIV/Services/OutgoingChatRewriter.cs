@@ -1,4 +1,5 @@
 using System.Text;
+using AliasXIV.Models;
 
 namespace AliasXIV.Services;
 
@@ -9,15 +10,18 @@ public sealed class OutgoingChatRewriter
     private readonly Configuration configuration;
     private readonly ReplacementEngine replacementEngine;
     private readonly ChatInputPolicy inputPolicy;
+    private readonly IOutgoingChannelResolver channelResolver;
 
     public OutgoingChatRewriter(
         Configuration configuration,
         ReplacementEngine replacementEngine,
-        ChatInputPolicy inputPolicy)
+        ChatInputPolicy inputPolicy,
+        IOutgoingChannelResolver channelResolver)
     {
         this.configuration = configuration;
         this.replacementEngine = replacementEngine;
         this.inputPolicy = inputPolicy;
+        this.channelResolver = channelResolver;
     }
 
     public enum RewriteStatus
@@ -35,6 +39,7 @@ public sealed class OutgoingChatRewriter
         string? FinalText,
         string? Command,
         ChatInputRejectReason RejectReason,
+        OutgoingChatChannel? Channel,
         int PrefixLength,
         int PayloadLength,
         int EnabledRuleCount,
@@ -46,26 +51,54 @@ public sealed class OutgoingChatRewriter
         var enabledRules = CountEnabledRules();
 
         if (!configuration.Enabled)
-            return new RewriteResult(RewriteStatus.Disabled, null, null, ChatInputRejectReason.None, 0, 0, enabledRules, 0, 0);
+        {
+            return new RewriteResult(
+                RewriteStatus.Disabled,
+                null,
+                null,
+                ChatInputRejectReason.None,
+                null,
+                0,
+                0,
+                enabledRules,
+                0,
+                0);
+        }
 
         if (string.IsNullOrEmpty(originalText))
-            return new RewriteResult(RewriteStatus.Empty, null, null, ChatInputRejectReason.Empty, 0, 0, enabledRules, 0, 0);
+        {
+            return new RewriteResult(
+                RewriteStatus.Empty,
+                null,
+                null,
+                ChatInputRejectReason.Empty,
+                null,
+                0,
+                0,
+                enabledRules,
+                0,
+                0);
+        }
 
         var originalBytes = Encoding.UTF8.GetByteCount(originalText);
+        var enabledChannels = configuration.GetEnabledChannelSet();
 
         if (!inputPolicy.TryGetTransformablePayload(
                 originalText,
-                configuration.ApplyToSimpleChatCommands,
+                enabledChannels,
+                channelResolver,
                 out var prefix,
                 out var payload,
                 out var rejectReason,
-                out var command))
+                out var command,
+                out var channel))
         {
             return new RewriteResult(
                 RewriteStatus.PolicyRejected,
                 null,
                 command,
                 rejectReason,
+                channel,
                 0,
                 0,
                 enabledRules,
@@ -81,6 +114,7 @@ public sealed class OutgoingChatRewriter
                 null,
                 command,
                 ChatInputRejectReason.None,
+                channel,
                 prefix.Length,
                 payload.Length,
                 enabledRules,
@@ -97,6 +131,7 @@ public sealed class OutgoingChatRewriter
                 null,
                 command,
                 ChatInputRejectReason.None,
+                channel,
                 prefix.Length,
                 payload.Length,
                 enabledRules,
@@ -109,6 +144,7 @@ public sealed class OutgoingChatRewriter
             finalText,
             command,
             ChatInputRejectReason.None,
+            channel,
             prefix.Length,
             payload.Length,
             enabledRules,
