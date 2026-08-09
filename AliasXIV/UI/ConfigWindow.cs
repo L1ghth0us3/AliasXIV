@@ -54,6 +54,9 @@ public sealed class ConfigWindow : Window, IDisposable
 
         DrawValidationWarnings();
 
+        ImGui.TextWrapped(
+            "Find tip: separate multiple words with | to replace them all with the same text (e.g. yes|yea → qi).");
+
         if (ImGui.Button("+ Add Rule"))
         {
             configuration.Rules.Add(new ReplacementRule());
@@ -79,7 +82,7 @@ public sealed class ConfigWindow : Window, IDisposable
 
         ImGui.TableSetupScrollFreeze(0, 1);
         ImGui.TableSetupColumn("Enabled", ImGuiTableColumnFlags.WidthFixed, 60f);
-        ImGui.TableSetupColumn("Find", ImGuiTableColumnFlags.WidthStretch, 1f);
+        ImGui.TableSetupColumn("Find (a|b)", ImGuiTableColumnFlags.WidthStretch, 1f);
         ImGui.TableSetupColumn("Replace With", ImGuiTableColumnFlags.WidthStretch, 1f);
         ImGui.TableSetupColumn("Match", ImGuiTableColumnFlags.WidthFixed, 120f);
         ImGui.TableSetupColumn("Case Sensitive", ImGuiTableColumnFlags.WidthFixed, 110f);
@@ -108,12 +111,18 @@ public sealed class ConfigWindow : Window, IDisposable
 
             ImGui.TableSetColumnIndex(1);
             ImGui.SetNextItemWidth(-float.Epsilon);
-            var find = rule.Find;
+            var find = rule.Finds.Count > 0
+                ? ReplacementRule.FormatFindsText(rule.Finds)
+                : rule.Find;
             if (ImGui.InputText("##find", ref find, 512))
             {
-                rule.Find = find;
+                rule.Finds = ReplacementRule.ParseFindsText(find);
+                rule.Find = string.Empty;
                 configuration.Save();
             }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("Separate multiple finds with | (e.g. yes|yea)");
 
             ImGui.TableSetColumnIndex(2);
             ImGui.SetNextItemWidth(-float.Epsilon);
@@ -191,13 +200,13 @@ public sealed class ConfigWindow : Window, IDisposable
 
     private void DrawValidationWarnings()
     {
-        var hasEmptyFind = configuration.Rules.Any(r => r.Enabled && string.IsNullOrEmpty(r.Find));
+        var hasEmptyFind = configuration.Rules.Any(r => r.Enabled && r.GetEffectiveFinds().Count == 0);
         if (hasEmptyFind)
             ImGui.TextColored(new Vector4(1f, 0.7f, 0.2f, 1f), "Warning: enabled rules with empty Find are ignored.");
 
         var duplicates = configuration.Rules
-            .Where(r => !string.IsNullOrEmpty(r.Find))
-            .GroupBy(r => (r.Find, r.MatchMode, r.CaseSensitive), StringTupleComparer.Instance)
+            .SelectMany(r => r.GetEffectiveFinds().Select(find => (Find: find, r.MatchMode, r.CaseSensitive)))
+            .GroupBy(x => x, StringTupleComparer.Instance)
             .Where(g => g.Count() > 1)
             .Select(g => g.Key.Find)
             .Distinct()

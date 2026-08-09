@@ -23,6 +23,21 @@ public class ReplacementEngineTests
             Enabled = enabled,
         };
 
+    private static ReplacementRule MultiFindRule(
+        string[] finds,
+        string replace,
+        MatchMode mode = MatchMode.WholeWord,
+        bool caseSensitive = false,
+        bool enabled = true)
+        => new()
+        {
+            Finds = finds.ToList(),
+            Replace = replace,
+            MatchMode = mode,
+            CaseSensitive = caseSensitive,
+            Enabled = enabled,
+        };
+
     [Fact]
     public void SimpleReplacement()
     {
@@ -240,6 +255,63 @@ public class ReplacementEngineTests
         var random = new SequenceRandom(0.10);
 
         Assert.Equal("bad bad bad", engine.Transform("nice nice nice", [rule], evaluateChance: true, random));
+    }
+
+    [Fact]
+    public void MultiFindReplacesAllTermsWithSameReplacement()
+    {
+        var rules = new[] { MultiFindRule(["yes", "yea"], "qi") };
+        Assert.Equal("qi qi please", engine.Transform("yes yea please", rules));
+    }
+
+    [Fact]
+    public void MultiFindLongestMatchWinsWithinSameRule()
+    {
+        var rules = new[] { MultiFindRule(["nice", "nice day"], "qi") };
+        Assert.Equal("qi", engine.Transform("nice day", rules));
+    }
+
+    [Fact]
+    public void MultiFindChanceIsRolledOnceForAllFinds()
+    {
+        var rule = MultiFindRule(["yes", "yea"], "qi");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 50f;
+        var random = new SequenceRandom(0.10);
+
+        Assert.Equal("qi qi", engine.Transform("yes yea", [rule], evaluateChance: true, random));
+    }
+
+    [Fact]
+    public void MultiFindChanceMissSkipsAllFinds()
+    {
+        var rule = MultiFindRule(["yes", "yea"], "qi");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 50f;
+        var random = new SequenceRandom(0.50);
+
+        Assert.Equal("yes yea", engine.Transform("yes yea", [rule], evaluateChance: true, random));
+    }
+
+    [Fact]
+    public void LegacySingleFindStillWorksViaEffectiveFinds()
+    {
+        var rules = new[] { Rule("yes", "qi") };
+        Assert.Equal("qi", engine.Transform("yes", rules));
+        Assert.Equal(["yes"], rules[0].GetEffectiveFinds());
+    }
+
+    [Fact]
+    public void ParseAndFormatFindsTextRoundTrips()
+    {
+        Assert.Equal(["yes", "yea"], ReplacementRule.ParseFindsText("yes|yea"));
+        Assert.Equal("yes|yea", ReplacementRule.FormatFindsText(["yes", "yea"]));
+        Assert.Equal(["yes", ""], ReplacementRule.ParseFindsText("yes|"));
+        Assert.Equal("yes|", ReplacementRule.FormatFindsText(["yes", ""]));
+        Assert.Empty(ReplacementRule.ParseFindsText(""));
+        Assert.DoesNotContain(
+            ReplacementRule.ParseFindsText("|||"),
+            static s => s.Length > 0);
     }
 
     private sealed class SequenceRandom : Random

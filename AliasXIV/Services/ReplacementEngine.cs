@@ -28,7 +28,11 @@ public sealed class ReplacementEngine
         for (var ruleIndex = 0; ruleIndex < rules.Count; ruleIndex++)
         {
             var rule = rules[ruleIndex];
-            if (!rule.Enabled || string.IsNullOrEmpty(rule.Find))
+            if (!rule.Enabled)
+                continue;
+
+            var finds = rule.GetEffectiveFinds();
+            if (finds.Count == 0)
                 continue;
 
             if (evaluateChance && rule.ChanceEnabled)
@@ -37,7 +41,7 @@ public sealed class ReplacementEngine
                     continue;
             }
 
-            CollectMatches(input, rule, ruleIndex, candidates);
+            CollectMatches(input, rule, finds, ruleIndex, candidates);
         }
 
         if (candidates.Count == 0)
@@ -90,6 +94,7 @@ public sealed class ReplacementEngine
     private static void CollectMatches(
         string input,
         ReplacementRule rule,
+        IReadOnlyList<string> finds,
         int rulePriority,
         List<ReplacementMatch> candidates)
     {
@@ -97,26 +102,28 @@ public sealed class ReplacementEngine
             ? StringComparison.Ordinal
             : StringComparison.OrdinalIgnoreCase;
 
-        var find = rule.Find;
-        var findLength = find.Length;
-        if (findLength == 0 || findLength > input.Length)
-            return;
-
-        var searchFrom = 0;
-        while (searchFrom <= input.Length - findLength)
+        foreach (var find in finds)
         {
-            var index = input.IndexOf(find, searchFrom, comparison);
-            if (index < 0)
-                break;
-
-            if (rule.MatchMode == MatchMode.WholeWord && !IsWholeWordMatch(input, index, findLength))
-            {
-                searchFrom = index + 1;
+            var findLength = find.Length;
+            if (findLength == 0 || findLength > input.Length)
                 continue;
-            }
 
-            candidates.Add(new ReplacementMatch(index, findLength, rule.Replace, rulePriority));
-            searchFrom = index + 1;
+            var searchFrom = 0;
+            while (searchFrom <= input.Length - findLength)
+            {
+                var index = input.IndexOf(find, searchFrom, comparison);
+                if (index < 0)
+                    break;
+
+                if (rule.MatchMode == MatchMode.WholeWord && !IsWholeWordMatch(input, index, findLength))
+                {
+                    searchFrom = index + 1;
+                    continue;
+                }
+
+                candidates.Add(new ReplacementMatch(index, findLength, rule.Replace, rulePriority));
+                searchFrom = index + 1;
+            }
         }
     }
 

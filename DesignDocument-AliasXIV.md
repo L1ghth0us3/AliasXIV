@@ -326,7 +326,11 @@ public sealed class ReplacementRule
 
     public bool Enabled { get; set; } = true;
 
+    // Legacy single-find field for older configs; runtime uses Finds / GetEffectiveFinds().
     public string Find { get; set; } = string.Empty;
+
+    // One or more find terms that all map to Replace (UI: pipe-separated, e.g. yes|yea).
+    public List<string> Finds { get; set; } = [];
 
     public string Replace { get; set; } = string.Empty;
 
@@ -358,13 +362,15 @@ The behavior must be deterministic.
 
 ## 9.1 Empty values
 
-`Find`:
+`Finds` with no non-empty terms (and legacy empty `Find`):
 
 ```text
 ""
 ```
 
 is invalid and must never execute.
+
+A single rule may list multiple find terms (UI: `yes|yea`) that all map to the same `Replace`. Shared settings (`MatchMode`, `CaseSensitive`, chance) apply to every term on that rule. Chance, when enabled, is rolled once per rule for all of its finds.
 
 `Replace` may be empty.
 
@@ -573,7 +579,7 @@ Grammar is the user's responsibility.
 Selection policy:
 
 1. leftmost match wins;
-2. if multiple rules begin at the same character, longest `Find` wins;
+2. if multiple candidates begin at the same character, longest find term wins;
 3. if length is also equal, earlier rule in configuration wins;
 4. selected matches may not overlap.
 
@@ -1094,11 +1100,13 @@ Suggested columns:
 Enabled | Find | Replace With | Match | Case Sensitive | Delete
 ```
 
+`Find` accepts multiple terms separated by `|` (e.g. `yes|yea`), all replaced with the same `Replace With` value.
+
 Example:
 
 ```text
 [x] | nice      | bad                | Whole word | [ ] | X
-[x] | cat       | dog                | Whole word | [ ] | X
+[x] | yes|yea   | qi                 | Whole word | [ ] | X
 [x] | very nice | absolutely awful   | Whole word | [ ] | X
 ```
 
@@ -1128,8 +1136,8 @@ Never create a second replacement implementation just for UI preview.
 
 Warn or disable saving/execution for:
 
-* empty `Find`;
-* duplicate rules with identical matching semantics.
+* empty `Find` / no effective find terms;
+* duplicate rules with identical matching semantics (per find term).
 
 Replacement may be empty.
 

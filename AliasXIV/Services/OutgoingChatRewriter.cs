@@ -121,7 +121,7 @@ public sealed class OutgoingChatRewriter
         var count = 0;
         foreach (var rule in configuration.Rules)
         {
-            if (rule.Enabled && !string.IsNullOrEmpty(rule.Find))
+            if (rule.Enabled && rule.GetEffectiveFinds().Count > 0)
                 count++;
         }
 

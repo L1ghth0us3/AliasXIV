@@ -99,9 +99,25 @@ public sealed class Plugin : IDalamudPlugin
         {
             rule.Find ??= string.Empty;
             rule.Replace ??= string.Empty;
+            rule.Finds ??= [];
             rule.ChancePercent = Math.Clamp(rule.ChancePercent, 0f, 100f);
             if (rule.Id == Guid.Empty)
                 rule.Id = Guid.NewGuid();
+
+            // Migrate legacy single Find into Finds, then keep Finds as the source of truth.
+            if (rule.Finds.Count == 0 && !string.IsNullOrEmpty(rule.Find))
+                rule.Finds.Add(rule.Find);
+
+            for (var i = rule.Finds.Count - 1; i >= 0; i--)
+            {
+                var find = rule.Finds[i]?.Trim() ?? string.Empty;
+                if (find.Length == 0)
+                    rule.Finds.RemoveAt(i);
+                else
+                    rule.Finds[i] = find;
+            }
+
+            rule.Find = string.Empty;
         }
     }
 }
