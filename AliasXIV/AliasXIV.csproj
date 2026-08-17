@@ -1,7 +1,7 @@
 <Project Sdk="Dalamud.NET.Sdk/15.0.0">
   <PropertyGroup>
     <Version>1.0.0.0</Version>
-    <PackageProjectUrl>https://github.com/AliasXIV/AliasXIV</PackageProjectUrl>
+    <PackageProjectUrl>https://github.com/L1ghth0us3/AliasXIV</PackageProjectUrl>
     <IsPackable>false</IsPackable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
