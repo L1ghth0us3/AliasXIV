@@ -222,7 +222,7 @@ public class ReplacementEngineTests
         rule.ChancePercent = 50f;
         var random = new SequenceRandom(0.49);
 
-        Assert.Equal("bad", engine.Transform("nice", [rule], evaluateChance: true, random));
+        Assert.Equal("bad", engine.Transform("nice", [rule], evaluateChance: true, random: random));
     }
 
     [Fact]
@@ -233,7 +233,7 @@ public class ReplacementEngineTests
         rule.ChancePercent = 50f;
         var random = new SequenceRandom(0.50);
 
-        Assert.Equal("nice", engine.Transform("nice", [rule], evaluateChance: true, random));
+        Assert.Equal("nice", engine.Transform("nice", [rule], evaluateChance: true, random: random));
     }
 
     [Fact]
@@ -254,7 +254,7 @@ public class ReplacementEngineTests
         rule.ChancePercent = 50f;
         var random = new SequenceRandom(0.10);
 
-        Assert.Equal("bad bad bad", engine.Transform("nice nice nice", [rule], evaluateChance: true, random));
+        Assert.Equal("bad bad bad", engine.Transform("nice nice nice", [rule], evaluateChance: true, random: random));
     }
 
     [Fact]
@@ -279,7 +279,7 @@ public class ReplacementEngineTests
         rule.ChancePercent = 50f;
         var random = new SequenceRandom(0.10);
 
-        Assert.Equal("qi qi", engine.Transform("yes yea", [rule], evaluateChance: true, random));
+        Assert.Equal("qi qi", engine.Transform("yes yea", [rule], evaluateChance: true, random: random));
     }
 
     [Fact]
@@ -290,7 +290,57 @@ public class ReplacementEngineTests
         rule.ChancePercent = 50f;
         var random = new SequenceRandom(0.50);
 
-        Assert.Equal("yes yea", engine.Transform("yes yea", [rule], evaluateChance: true, random));
+        Assert.Equal("yes yea", engine.Transform("yes yea", [rule], evaluateChance: true, random: random));
+    }
+
+    [Fact]
+    public void PerOccurrenceChanceRollsIndependentlyPerMatch()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 50f;
+        var random = new SequenceRandom(0.10, 0.90, 0.10);
+
+        Assert.Equal(
+            "bad nice bad",
+            engine.Transform("nice nice nice", [rule], evaluateChance: true, ChanceScope.PerOccurrence, random));
+    }
+
+    [Fact]
+    public void PerOccurrenceChanceRollsIndependentlyAcrossMultiFind()
+    {
+        var rule = MultiFindRule(["yes", "yea"], "qi");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 50f;
+        var random = new SequenceRandom(0.10, 0.90);
+
+        Assert.Equal(
+            "qi yea",
+            engine.Transform("yes yea", [rule], evaluateChance: true, ChanceScope.PerOccurrence, random));
+    }
+
+    [Fact]
+    public void PerOccurrenceChanceAtZeroPercentNeverApplies()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 0f;
+
+        Assert.Equal(
+            "nice nice",
+            engine.Transform("nice nice", [rule], evaluateChance: true, ChanceScope.PerOccurrence));
+    }
+
+    [Fact]
+    public void PerOccurrenceChanceAtOneHundredPercentAlwaysApplies()
+    {
+        var rule = Rule("nice", "bad");
+        rule.ChanceEnabled = true;
+        rule.ChancePercent = 100f;
+
+        Assert.Equal(
+            "bad bad",
+            engine.Transform("nice nice", [rule], evaluateChance: true, ChanceScope.PerOccurrence));
     }
 
     [Fact]

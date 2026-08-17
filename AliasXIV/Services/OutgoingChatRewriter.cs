@@ -106,7 +106,11 @@ public sealed class OutgoingChatRewriter
                 0);
         }
 
-        var transformed = replacementEngine.Transform(payload, configuration.Rules, evaluateChance: true);
+        var transformed = replacementEngine.Transform(
+            payload,
+            configuration.Rules,
+            evaluateChance: true,
+            chanceScope: configuration.ChanceScope);
         if (transformed == payload)
         {
             return new RewriteResult(

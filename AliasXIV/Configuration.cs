@@ -19,6 +19,8 @@ public sealed class Configuration : IPluginConfiguration
 
     public List<ReplacementRule> Rules { get; set; } = [];
 
+    public ChanceScope ChanceScope { get; set; } = ChanceScope.PerMessage;
+
     public void Save()
     {
         Plugin.PluginInterface.SavePluginConfig(this);

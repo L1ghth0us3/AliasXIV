@@ -17,6 +17,7 @@ public sealed class ReplacementEngine
         string input,
         IReadOnlyList<ReplacementRule> rules,
         bool evaluateChance = false,
+        ChanceScope chanceScope = ChanceScope.PerMessage,
         Random? random = null)
     {
         if (string.IsNullOrEmpty(input) || rules.Count == 0)
@@ -35,13 +36,13 @@ public sealed class ReplacementEngine
             if (finds.Count == 0)
                 continue;
 
-            if (evaluateChance && rule.ChanceEnabled)
+            if (evaluateChance && rule.ChanceEnabled && chanceScope == ChanceScope.PerMessage)
             {
                 if (rng!.NextDouble() * 100.0 >= rule.ChancePercent)
                     continue;
             }
 
-            CollectMatches(input, rule, finds, ruleIndex, candidates);
+            CollectMatches(input, rule, finds, ruleIndex, candidates, evaluateChance, chanceScope, rng);
         }
 
         if (candidates.Count == 0)
@@ -96,11 +97,17 @@ public sealed class ReplacementEngine
         ReplacementRule rule,
         IReadOnlyList<string> finds,
         int rulePriority,
-        List<ReplacementMatch> candidates)
+        List<ReplacementMatch> candidates,
+        bool evaluateChance,
+        ChanceScope chanceScope,
+        Random? rng)
     {
         var comparison = rule.CaseSensitive
             ? StringComparison.Ordinal
             : StringComparison.OrdinalIgnoreCase;
+        var rollPerOccurrence = evaluateChance
+                                && rule.ChanceEnabled
+                                && chanceScope == ChanceScope.PerOccurrence;
 
         foreach (var find in finds)
         {
@@ -116,6 +123,12 @@ public sealed class ReplacementEngine
                     break;
 
                 if (rule.MatchMode == MatchMode.WholeWord && !IsWholeWordMatch(input, index, findLength))
+                {
+                    searchFrom = index + 1;
+                    continue;
+                }
+
+                if (rollPerOccurrence && rng!.NextDouble() * 100.0 >= rule.ChancePercent)
                 {
                     searchFrom = index + 1;
                     continue;

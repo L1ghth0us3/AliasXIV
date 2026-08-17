@@ -39,6 +39,22 @@ public sealed class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
+        var chancePerOccurrence = configuration.ChanceScope == ChanceScope.PerOccurrence;
+        if (ImGui.Checkbox("Roll chance per occurrence", ref chancePerOccurrence))
+        {
+            configuration.ChanceScope = chancePerOccurrence
+                ? ChanceScope.PerOccurrence
+                : ChanceScope.PerMessage;
+            configuration.Save();
+        }
+
+        if (ImGui.IsItemHovered())
+        {
+            ImGui.SetTooltip(
+                "When off, each rule with chance rolls once per message (all matches or none).\n" +
+                "When on, each match rolls independently.");
+        }
+
         if (ImGui.CollapsingHeader("Channels"))
         {
             ImGui.Indent();
@@ -176,7 +192,7 @@ public sealed class ConfigWindow : Window, IDisposable
                     | ImGuiTableFlags.Resizable
                     | ImGuiTableFlags.ScrollX;
 
-        if (!ImGui.BeginTable("##AliasXIVRulesV5", 7, flags, new Vector2(-1, height)))
+        if (!ImGui.BeginTable("##AliasXIVRulesV7", 7, flags, new Vector2(-1, height)))
             return;
 
         ImGui.TableSetupScrollFreeze(0, 1);
@@ -252,6 +268,9 @@ public sealed class ConfigWindow : Window, IDisposable
                 rule.ChanceEnabled = chanceEnabled;
                 configuration.Save();
             }
+
+            if (ImGui.IsItemHovered())
+                ImGui.SetTooltip("When enabled, this rule applies with the given probability.");
 
             ImGui.TableSetColumnIndex(5);
             ImGui.SetNextItemWidth(-float.Epsilon);
