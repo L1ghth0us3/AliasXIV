@@ -4,4 +4,5 @@ public enum ChanceScope
 {
     PerMessage,
     PerOccurrence,
+    PerEntry,
 }

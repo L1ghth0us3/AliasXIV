@@ -344,6 +344,31 @@ public class ReplacementEngineTests
     }
 
     [Fact]
+    public void PerEntryUsesEachRuleScopeIndependently()
+    {
+        var perMessageRule = Rule("nice", "bad");
+        perMessageRule.ChanceEnabled = true;
+        perMessageRule.ChancePercent = 50f;
+        perMessageRule.ChanceScope = ChanceScope.PerMessage;
+
+        var perOccurrenceRule = Rule("yes", "qi");
+        perOccurrenceRule.ChanceEnabled = true;
+        perOccurrenceRule.ChancePercent = 50f;
+        perOccurrenceRule.ChanceScope = ChanceScope.PerOccurrence;
+
+        var random = new SequenceRandom(0.10, 0.10, 0.90);
+
+        Assert.Equal(
+            "bad qi yes",
+            engine.Transform(
+                "nice yes yes",
+                [perMessageRule, perOccurrenceRule],
+                evaluateChance: true,
+                ChanceScope.PerEntry,
+                random));
+    }
+
+    [Fact]
     public void LegacySingleFindStillWorksViaEffectiveFinds()
     {
         var rules = new[] { Rule("yes", "qi") };

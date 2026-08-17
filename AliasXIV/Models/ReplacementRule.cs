@@ -28,6 +28,11 @@ public sealed class ReplacementRule
     public float ChancePercent { get; set; } = 100f;
 
     /// <summary>
+    /// Per-rule chance scope when global <see cref="Configuration.ChanceScope"/> is <see cref="ChanceScope.PerEntry"/>.
+    /// </summary>
+    public ChanceScope ChanceScope { get; set; } = ChanceScope.PerMessage;
+
+    /// <summary>
     /// Returns non-empty find terms: <see cref="Finds"/> when present, otherwise legacy <see cref="Find"/>.
     /// </summary>
     public IReadOnlyList<string> GetEffectiveFinds()

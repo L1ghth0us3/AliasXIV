@@ -2,6 +2,7 @@ using System.Numerics;
 using AliasXIV.Models;
 using AliasXIV.Services;
 using Dalamud.Bindings.ImGui;
+using Dalamud.Interface;
 using Dalamud.Interface.Windowing;
 
 namespace AliasXIV.UI;
@@ -10,20 +11,36 @@ public sealed class ConfigWindow : Window, IDisposable
 {
     private readonly Configuration configuration;
     private readonly ReplacementEngine replacementEngine;
+    private readonly Action openSettings;
     private string previewInput = "Today is a nice day";
     private MatchMode activeMatchTab = MatchMode.WholeWord;
 
-    public ConfigWindow(Configuration configuration, ReplacementEngine replacementEngine)
+    public ConfigWindow(
+        Configuration configuration,
+        ReplacementEngine replacementEngine,
+        Action openSettings)
         : base("AliasXIV###AliasXIVConfig")
     {
         this.configuration = configuration;
         this.replacementEngine = replacementEngine;
+        this.openSettings = openSettings;
 
         SizeConstraints = new WindowSizeConstraints
         {
             MinimumSize = new Vector2(640, 420),
             MaximumSize = new Vector2(float.MaxValue, float.MaxValue),
         };
+
+        TitleBarButtons =
+        [
+            new TitleBarButton
+            {
+                Icon = FontAwesomeIcon.Cog,
+                IconOffset = new Vector2(2, 1),
+                ShowTooltip = () => ImGui.SetTooltip("Settings"),
+                Click = _ => openSettings(),
+            },
+        ];
     }
 
     public void Dispose()
@@ -32,36 +49,6 @@ public sealed class ConfigWindow : Window, IDisposable
 
     public override void Draw()
     {
-        var enabled = configuration.Enabled;
-        if (ImGui.Checkbox("Enable AliasXIV", ref enabled))
-        {
-            configuration.Enabled = enabled;
-            configuration.Save();
-        }
-
-        var chancePerOccurrence = configuration.ChanceScope == ChanceScope.PerOccurrence;
-        if (ImGui.Checkbox("Roll chance per occurrence", ref chancePerOccurrence))
-        {
-            configuration.ChanceScope = chancePerOccurrence
-                ? ChanceScope.PerOccurrence
-                : ChanceScope.PerMessage;
-            configuration.Save();
-        }
-
-        if (ImGui.IsItemHovered())
-        {
-            ImGui.SetTooltip(
-                "When off, each rule with chance rolls once per message (all matches or none).\n" +
-                "When on, each match rolls independently.");
-        }
-
-        if (ImGui.CollapsingHeader("Channels"))
-        {
-            ImGui.Indent();
-            DrawChannelSelector();
-            ImGui.Unindent();
-        }
-
         if (ImGui.CollapsingHeader("Example preview"))
         {
             ImGui.Indent();
@@ -73,6 +60,12 @@ public sealed class ConfigWindow : Window, IDisposable
 
         ImGui.TextWrapped(
             "Find tip: separate multiple words with | to replace them all with the same text (e.g. yes|yea → qi).");
+
+        if (configuration.ChanceScope == ChanceScope.PerEntry)
+        {
+            ImGui.TextWrapped(
+                "Per-entry chance scope is enabled in settings. Use the Scope column to choose per message or per occurrence for each rule.");
+        }
 
         if (ImGui.BeginTabBar("##AliasXIVMatchTabs"))
         {
@@ -94,82 +87,6 @@ public sealed class ConfigWindow : Window, IDisposable
         }
     }
 
-    private void DrawChannelSelector()
-    {
-        ImGui.TextWrapped(
-            "Replacements apply only on enabled channels. Plain chat uses the game's active channel; " +
-            "/tell and /reply are always skipped.");
-
-        if (ImGui.Button("Enable all"))
-        {
-            configuration.EnabledChannels = OutgoingChatChannelCatalog.AllChannels.ToList();
-            configuration.Save();
-        }
-
-        ImGui.SameLine();
-        if (ImGui.Button("Disable all"))
-        {
-            configuration.EnabledChannels.Clear();
-            configuration.Save();
-        }
-
-        foreach (var info in OutgoingChatChannelCatalog.All)
-        {
-            if (IsLinkshell(info.Channel) || IsCrossLinkshell(info.Channel))
-                continue;
-
-            DrawChannelCheckbox(info);
-        }
-
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Linkshells");
-        DrawChannelGrid(
-            "##AliasXIVLsChannels",
-            OutgoingChatChannelCatalog.All.Where(info => IsLinkshell(info.Channel)));
-
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Cross-world Linkshells");
-        DrawChannelGrid(
-            "##AliasXIVCwlsChannels",
-            OutgoingChatChannelCatalog.All.Where(info => IsCrossLinkshell(info.Channel)));
-    }
-
-    private void DrawChannelGrid(string tableId, IEnumerable<OutgoingChatChannelInfo> channels)
-    {
-        var list = channels.ToList();
-        const int columns = 2;
-        if (!ImGui.BeginTable(tableId, columns, ImGuiTableFlags.SizingStretchSame))
-            return;
-
-        for (var i = 0; i < list.Count; i++)
-        {
-            if (i % columns == 0)
-                ImGui.TableNextRow();
-
-            ImGui.TableNextColumn();
-            DrawChannelCheckbox(list[i]);
-        }
-
-        ImGui.EndTable();
-    }
-
-    private void DrawChannelCheckbox(OutgoingChatChannelInfo info)
-    {
-        var isEnabled = configuration.IsChannelEnabled(info.Channel);
-        if (!ImGui.Checkbox(info.DisplayName, ref isEnabled))
-            return;
-
-        configuration.SetChannelEnabled(info.Channel, isEnabled);
-        configuration.Save();
-    }
-
-    private static bool IsLinkshell(OutgoingChatChannel channel)
-        => channel is >= OutgoingChatChannel.Linkshell1 and <= OutgoingChatChannel.Linkshell8;
-
-    private static bool IsCrossLinkshell(OutgoingChatChannel channel)
-        => channel is >= OutgoingChatChannel.CrossLinkshell1 and <= OutgoingChatChannel.CrossLinkshell8;
-
-
     private void DrawActiveTabContents()
     {
         if (ImGui.Button("+ Add Rule"))
@@ -178,13 +95,15 @@ public sealed class ConfigWindow : Window, IDisposable
             configuration.Save();
         }
 
-        // Fill all remaining window height with the rules table.
         var remaining = ImGui.GetContentRegionAvail();
         DrawRuleTable(Math.Max(120f, remaining.Y));
     }
 
     private void DrawRuleTable(float height)
     {
+        var showScopeColumn = configuration.ChanceScope == ChanceScope.PerEntry;
+        var columnCount = showScopeColumn ? 8 : 7;
+
         var flags = ImGuiTableFlags.Borders
                     | ImGuiTableFlags.RowBg
                     | ImGuiTableFlags.SizingStretchProp
@@ -192,7 +111,7 @@ public sealed class ConfigWindow : Window, IDisposable
                     | ImGuiTableFlags.Resizable
                     | ImGuiTableFlags.ScrollX;
 
-        if (!ImGui.BeginTable("##AliasXIVRulesV7", 7, flags, new Vector2(-1, height)))
+        if (!ImGui.BeginTable("##AliasXIVRulesV8", columnCount, flags, new Vector2(-1, height)))
             return;
 
         ImGui.TableSetupScrollFreeze(0, 1);
@@ -202,6 +121,8 @@ public sealed class ConfigWindow : Window, IDisposable
         ImGui.TableSetupColumn("Case Sensitive", ImGuiTableColumnFlags.WidthFixed, 110f);
         ImGui.TableSetupColumn("Chance", ImGuiTableColumnFlags.WidthFixed, 60f);
         ImGui.TableSetupColumn("%", ImGuiTableColumnFlags.WidthFixed, 70f);
+        if (showScopeColumn)
+            ImGui.TableSetupColumn("Scope", ImGuiTableColumnFlags.WidthFixed, 140f);
         ImGui.TableSetupColumn("Delete", ImGuiTableColumnFlags.WidthFixed, 50f);
         ImGui.TableHeadersRow();
 
@@ -285,7 +206,50 @@ public sealed class ConfigWindow : Window, IDisposable
             if (!rule.ChanceEnabled)
                 ImGui.EndDisabled();
 
-            ImGui.TableSetColumnIndex(6);
+            var deleteColumn = showScopeColumn ? 7 : 6;
+            if (showScopeColumn)
+            {
+                ImGui.TableSetColumnIndex(6);
+                ImGui.SetNextItemWidth(-float.Epsilon);
+                if (!rule.ChanceEnabled)
+                    ImGui.BeginDisabled();
+                var scopeLabel = rule.ChanceScope == ChanceScope.PerOccurrence
+                    ? "Per occurrence"
+                    : "Per message";
+                if (ImGui.BeginCombo("##chanceScope", scopeLabel))
+                {
+                    if (ImGui.Selectable("Per message", rule.ChanceScope == ChanceScope.PerMessage))
+                    {
+                        rule.ChanceScope = ChanceScope.PerMessage;
+                        configuration.Save();
+                    }
+
+                    if (rule.ChanceScope == ChanceScope.PerMessage)
+                        ImGui.SetItemDefaultFocus();
+
+                    if (ImGui.Selectable("Per occurrence", rule.ChanceScope == ChanceScope.PerOccurrence))
+                    {
+                        rule.ChanceScope = ChanceScope.PerOccurrence;
+                        configuration.Save();
+                    }
+
+                    if (rule.ChanceScope == ChanceScope.PerOccurrence)
+                        ImGui.SetItemDefaultFocus();
+
+                    ImGui.EndCombo();
+                }
+                if (!rule.ChanceEnabled)
+                    ImGui.EndDisabled();
+
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                {
+                    ImGui.SetTooltip(
+                        "Per message: one roll for this rule per send.\n" +
+                        "Per occurrence: independent roll per match for this rule.");
+                }
+            }
+
+            ImGui.TableSetColumnIndex(deleteColumn);
             var io = ImGui.GetIO();
             var canDelete = io.KeyCtrl && io.KeyShift;
             if (!canDelete)

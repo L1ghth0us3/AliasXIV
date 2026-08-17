@@ -3,6 +3,7 @@ using AliasXIV.Models;
 using AliasXIV.Services;
 using AliasXIV.UI;
 using Dalamud.Game.Command;
+using Dalamud.Interface.ImGuiFileDialog;
 using Dalamud.IoC;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
@@ -21,7 +22,9 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IChatGui ChatGui { get; private set; } = null!;
 
     private readonly WindowSystem windowSystem = new("AliasXIV");
+    private readonly FileDialogManager fileDialogManager = new();
     private readonly ConfigWindow configWindow;
+    private readonly SettingsWindow settingsWindow;
     private readonly ChatBoxHook chatBoxHook;
     private readonly ReplacementEngine replacementEngine = new();
     private readonly ChatInputPolicy chatInputPolicy = new();
@@ -33,7 +36,7 @@ public sealed class Plugin : IDalamudPlugin
     public Plugin()
     {
         Configuration = PluginInterface.GetPluginConfig() as Configuration ?? new Configuration();
-        NormalizeConfiguration(Configuration);
+        ConfigurationNormalizer.Normalize(Configuration);
 
         rewriter = new OutgoingChatRewriter(
             Configuration,
@@ -41,8 +44,16 @@ public sealed class Plugin : IDalamudPlugin
             chatInputPolicy,
             channelResolver);
 
-        configWindow = new ConfigWindow(Configuration, replacementEngine);
+        settingsWindow = new SettingsWindow(
+            Configuration,
+            fileDialogManager,
+            ChatGui);
+        configWindow = new ConfigWindow(
+            Configuration,
+            replacementEngine,
+            () => settingsWindow.IsOpen = true);
         windowSystem.AddWindow(configWindow);
+        windowSystem.AddWindow(settingsWindow);
 
         chatBoxHook = new ChatBoxHook(
             rewriter,
@@ -52,12 +63,12 @@ public sealed class Plugin : IDalamudPlugin
 
         CommandManager.AddHandler(CommandName, new CommandInfo(OnCommand)
         {
-            HelpMessage = "Open AliasXIV configuration. Use '/aliasxiv on|off' to toggle.",
+            HelpMessage = "Open AliasXIV rules editor. Use '/aliasxiv on|off' to toggle.",
         });
 
         PluginInterface.UiBuilder.Draw += windowSystem.Draw;
-        PluginInterface.UiBuilder.OpenConfigUi += ToggleConfigUi;
-        PluginInterface.UiBuilder.OpenMainUi += ToggleConfigUi;
+        PluginInterface.UiBuilder.OpenConfigUi += ToggleSettingsUi;
+        PluginInterface.UiBuilder.OpenMainUi += ToggleMainUi;
 
         Log.Information("AliasXIV loaded.");
     }
@@ -65,11 +76,13 @@ public sealed class Plugin : IDalamudPlugin
     public void Dispose()
     {
         PluginInterface.UiBuilder.Draw -= windowSystem.Draw;
-        PluginInterface.UiBuilder.OpenConfigUi -= ToggleConfigUi;
-        PluginInterface.UiBuilder.OpenMainUi -= ToggleConfigUi;
+        PluginInterface.UiBuilder.OpenConfigUi -= ToggleSettingsUi;
+        PluginInterface.UiBuilder.OpenMainUi -= ToggleMainUi;
 
         windowSystem.RemoveAllWindows();
+        fileDialogManager.Reset();
         configWindow.Dispose();
+        settingsWindow.Dispose();
         chatBoxHook.Dispose();
         CommandManager.RemoveHandler(CommandName);
     }
@@ -93,54 +106,10 @@ public sealed class Plugin : IDalamudPlugin
             return;
         }
 
-        ToggleConfigUi();
+        ToggleMainUi();
     }
 
-    public void ToggleConfigUi() => configWindow.Toggle();
+    public void ToggleSettingsUi() => settingsWindow.Toggle();
 
-    private static void NormalizeConfiguration(Configuration configuration)
-    {
-        configuration.Rules ??= [];
-        configuration.EnabledChannels ??= [];
-
-        // Migrate config v1 umbrella slash flag → per-channel allowlist (all off by default).
-        if (configuration.Version < 2)
-        {
-            configuration.EnabledChannels = [];
-            configuration.Version = 2;
-        }
-        else
-        {
-            // Drop unknown values and duplicates after catalog changes.
-            configuration.EnabledChannels = configuration.EnabledChannels
-                .Where(OutgoingChatChannelCatalog.IsDefined)
-                .Distinct()
-                .ToList();
-        }
-
-        foreach (var rule in configuration.Rules)
-        {
-            rule.Find ??= string.Empty;
-            rule.Replace ??= string.Empty;
-            rule.Finds ??= [];
-            rule.ChancePercent = Math.Clamp(rule.ChancePercent, 0f, 100f);
-            if (rule.Id == Guid.Empty)
-                rule.Id = Guid.NewGuid();
-
-            // Migrate legacy single Find into Finds, then keep Finds as the source of truth.
-            if (rule.Finds.Count == 0 && !string.IsNullOrEmpty(rule.Find))
-                rule.Finds.Add(rule.Find);
-
-            for (var i = rule.Finds.Count - 1; i >= 0; i--)
-            {
-                var find = rule.Finds[i]?.Trim() ?? string.Empty;
-                if (find.Length == 0)
-                    rule.Finds.RemoveAt(i);
-                else
-                    rule.Finds[i] = find;
-            }
-
-            rule.Find = string.Empty;
-        }
-    }
+    public void ToggleMainUi() => configWindow.Toggle();
 }

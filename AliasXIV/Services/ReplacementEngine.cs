@@ -36,13 +36,17 @@ public sealed class ReplacementEngine
             if (finds.Count == 0)
                 continue;
 
-            if (evaluateChance && rule.ChanceEnabled && chanceScope == ChanceScope.PerMessage)
+            var effectiveScope = chanceScope == ChanceScope.PerEntry
+                ? rule.ChanceScope
+                : chanceScope;
+
+            if (evaluateChance && rule.ChanceEnabled && effectiveScope == ChanceScope.PerMessage)
             {
                 if (rng!.NextDouble() * 100.0 >= rule.ChancePercent)
                     continue;
             }
 
-            CollectMatches(input, rule, finds, ruleIndex, candidates, evaluateChance, chanceScope, rng);
+            CollectMatches(input, rule, finds, ruleIndex, candidates, evaluateChance, effectiveScope, rng);
         }
 
         if (candidates.Count == 0)
